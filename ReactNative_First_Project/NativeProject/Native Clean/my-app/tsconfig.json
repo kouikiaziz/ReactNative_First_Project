@@ -1,0 +1,17 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
+, "app/components/CText.js", "app/components/CTextInput.tsx", "app/(tabs)/userinput.tsxx", "app/components/CPicker.js", "app/components/CPicker.js", "app/components/test.jsx", "app/(tabs)/loginscreen.js", "app/components/svgComponent.js", "app/components/ImagesSelector.js", "app/components/CardDeleteAction.js", "app/components/CActivityIndicator.js", "app/(tabs)/Loginscreen.jsx", "app/(tabs)/Login.jsx", "app/(tabs)/index.jsx", "app/api/client.js", "app/api/Auth.js", "app/(tabs)/RecoverAccont.jsx", "app/config/PhoneTokenExtractor.jsx"  ]
+}
