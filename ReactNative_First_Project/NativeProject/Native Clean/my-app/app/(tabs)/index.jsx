@@ -33,6 +33,7 @@ const Stack = createNativeStackNavigator();
 import * as Notifications from 'expo-notifications';
 import LottieView from 'lottie-react-native';
 import PToken from '../config/PhoneTokenExtractor';
+import HomeApi from '../api/HomeApi';
 
 export default function index() {
   const [user,setUser] = useState(null);
@@ -47,6 +48,10 @@ export default function index() {
    if(!res) return;
    setUser(res);
    console.log('user restored from secure storage : ',res);
+   if(res != null){
+    updateStatus({Token:res.Token},true);
+    console.log("user status updated");
+  }
   }
  
   async function HandlePushToken(){
@@ -55,8 +60,22 @@ export default function index() {
       let Token = await PToken();
       await storage.StorePToken(Token);}
   }
-  
 
+  async function updateStatus(data,bool){
+    if(bool == true){
+      data.setStatus=1;
+    }else{
+      data.setStatus=2;
+    }
+    let res = await HomeApi.UpdateStatus(data);
+    if(res.ok){
+      console.log(res.data);
+    }else{
+      console.log('not ok');
+    }
+  }
+  
+  
   useEffect(() => {
     // console.log(PhoneTokenExtractor());
     async function prepare() {
@@ -69,9 +88,12 @@ export default function index() {
       } finally {
         // Tell the application to render
         setIsAppReady(true);
+  
       }
+
     }
     prepare();
+    
   },[]
   )
 
@@ -79,6 +101,8 @@ export default function index() {
     if (appIsReady) {
       
       await SplashScreen.hideAsync();
+      
+      
       
     }
   }, [isAppReady]);
@@ -89,6 +113,8 @@ export default function index() {
       alignItems: 'center'}}>
       <LottieView autoPlay loop    style={{width:200,height:200}}     source={require('./Loading.json')}    /><Text>LOADING</Text></View>;
   }
+
+  
 
   return (
     <AuthContext.Provider value={{user,setUser}}>   

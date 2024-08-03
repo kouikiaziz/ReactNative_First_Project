@@ -24,6 +24,10 @@ class FriendRequest
     #[ORM\Column]
     private ?bool $Accepted = null;
 
+    #[ORM\OneToOne(cascade: ['persist', 'remove'])]
+    #[ORM\JoinColumn(nullable: true)]
+    private ?Conversation $conversation_id = null;
+
     public function getId(): ?int
     {
         return $this->id;
@@ -61,6 +65,18 @@ class FriendRequest
     public function setAccepted(bool $Accepted): static
     {
         $this->Accepted = $Accepted;
+
+        return $this;
+    }
+
+    public function getConversationId(): ?conversation
+    {
+        return $this->conversation_id;
+    }
+
+    public function setConversationId(conversation $conversation_id): static
+    {
+        $this->conversation_id = $conversation_id;
 
         return $this;
     }

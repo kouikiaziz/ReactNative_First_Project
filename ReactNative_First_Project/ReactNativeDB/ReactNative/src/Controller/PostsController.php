@@ -3,12 +3,16 @@
 namespace App\Controller;
 
 use App\Entity\Comment;
+use App\Entity\Conversation;
 use App\Entity\FriendRequest;
 use App\Entity\Like;
+use App\Entity\Message;
 use App\Entity\Post;
 use App\Repository\CommentRepository;
+use App\Repository\ConversationRepository;
 use App\Repository\FriendRequestRepository;
 use App\Repository\LikeRepository;
+use App\Repository\MessageRepository;
 use App\Repository\PostRepository;
 use App\Repository\UserRepository;
 use Exception;
@@ -21,6 +25,7 @@ use Symfony\Component\Routing\Attribute\Route;
 use App\Service\ExpoNotificationService;
 use Cloudinary\Cloudinary;
 use DateTime;
+use Symfony\Component\Validator\Constraints\Date;
 
 class PostsController extends AbstractController
 {
@@ -116,6 +121,17 @@ class PostsController extends AbstractController
             }else{
             
                 $FriendRequest->setAccepted(true);
+                $conversation = new Conversation();
+                $conversation->setUser1($Sender[0]->getId());
+                $conversation->setUser2($FoundUsers[0]->getId());
+                try{
+                    $em = $mr->getManager();
+                    $em->persist($conversation);
+                    $em->flush();
+                    }catch(Exception $e){
+                        return $this->json(['error' => 'ERROR Whilte inserting Into DataBase : '.$e], Response::HTTP_SERVICE_UNAVAILABLE);
+                    }
+                $FriendRequest->setConversationId($conversation);
                 $bool = true;
             }
 
@@ -227,6 +243,17 @@ class PostsController extends AbstractController
         }
         $fr = $fr[0];
         $fr->setAccepted(true);
+        $conversation = new Conversation();
+                $conversation->setUser1($fr->getIdSender());
+                $conversation->setUser2($fr->getIdRecv());
+                try{
+                    $em = $mr->getManager();
+                    $em->persist($conversation);
+                    $em->flush();
+                    }catch(Exception $e){
+                        return $this->json(['error' => 'ERROR Whilte inserting Into DataBase : '.$e], Response::HTTP_SERVICE_UNAVAILABLE);
+                    }
+                $fr->setConversationId($conversation);
 
         try{
             $em = $mr->getManager();
@@ -473,6 +500,33 @@ class PostsController extends AbstractController
             
         }
     }
+
+    private function uploadAudioCloudinary($audio): string
+{
+    $cloudinary = new Cloudinary([
+        'cloud_name' => $_ENV['CLOUDINARY_CLOUD_NAME'],
+        'api_key'    => $_ENV['CLOUDINARY_API_KEY'],
+        'api_secret' => $_ENV['CLOUDINARY_API_SECRET'],
+    ]);
+
+    if ($audio) {
+        $audioPath = $audio->getRealPath(); // Get the real path of the audio file
+
+        // Upload to Cloudinary
+        $cloudinaryResponse = $cloudinary->uploadApi()->upload($audioPath, [
+            'resource_type' => 'video', // Set resource_type to 'video' for audio files
+            'folder' => 'audio_files', // Optional: specify a folder in Cloudinary to store audio files
+            'resource' => 'auto', // Optional: let Cloudinary determine the resource type
+        ]);
+
+        // Cloudinary response will contain details about the uploaded audio
+        $publicId = $cloudinaryResponse['public_id'];
+        $audioUrl = $cloudinaryResponse['secure_url'];
+
+        return $audioUrl;
+    }
+}
+
 
 
     #[Route('/DeleteMyPost', name: 'app_DeleteMyPost')]
@@ -777,7 +831,7 @@ class PostsController extends AbstractController
         }
         // notify owner
         try{
-            if($post->getUserid() != $Currentuser->getId() )
+             if($post->getUserid()->getId() != $Currentuser->getId() )
         $this->expoNotificationService->sendNotification($post->getUserid()->getDeviceToken(), "SomeOne Commented On Your Post", $Currentuser->getName()." Commented On One Of Your Posts",['post_id'=>$post->getId()]);
     }catch(Exception $e){
 
@@ -1097,6 +1151,324 @@ class PostsController extends AbstractController
         return $this->json(['Success' => "Friend Request Canceled Successfuly"], Response::HTTP_ACCEPTED);
 
     }
+
+
+
+    #[Route('/GetData', name: 'app_GetData')]
+    public function GetData(MessageRepository $rp7,ConversationRepository $rp6,CommentRepository $rp5,LikeRepository $rp4,UserRepository $rp ,FriendRequestRepository $rp2,PostRepository $rp3,Request $request,ManagerRegistry $mr): JsonResponse
+    {
+        $jsonContent = $request->getContent();
+        
+        // Debugging: Log the raw JSON content
+        file_put_contents('php://stderr', "Request Content: $jsonContent\n");
+        $data = json_decode($jsonContent, true);
+
+
+        if ($data === null) {
+            return $this->json(['error' => 'Invalid JSON'], Response::HTTP_BAD_REQUEST);
+        }
+        $CurrentUserToken = $data['Token'] ?? null;     
+ 
+
+        if($CurrentUserToken == null ){
+            return $this->json(['error' => 'Something Went Wrong'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $Currentuser = $rp->findBy(['token'=>$CurrentUserToken]);
+
+        if($Currentuser == []){
+            return $this->json(['error' => 'Something Went Wrong'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $Currentuser = $Currentuser[0];
+        //get all conversation where current user exists
+$conversations = $rp6->GetAllConversationsWhereUserIdExists($Currentuser->getId());
+
+
+
+        $tableData = [];
+        $theuser = null;
+        $amisender= false;
+        $custom_id=0;
+        foreach ($conversations as $conversation) {
+            $theuser=null;
+            if($conversation->getUser1()->getId() == $Currentuser->getId()){
+                $theuser = $conversation->getUser2();
+            }else{
+                $theuser = $conversation->getUser1();
+
+            }
+            //get all message foreach one of these conversations 
+               $chats= $rp7->getMessageByConversationId($conversation->getId());
+               
+
+               $org_chat = [];
+               $custom_id = 0;
+               foreach($chats as $msg){
+                $amisender=false;
+                $custom_id = $custom_id+1;
+                    if($msg->getSenderId()->getId()==$Currentuser->getId()){
+                        $amisender=true;
+                    }else{
+                        $amisender=false;
+                    }
+                    $org_chat []=[
+                        'msg_id' => $custom_id,
+                        'am_i_sender'=>$amisender,
+                        'content'=>$msg->getContent(),
+                        'time'=>$msg->getTime(),
+                        'image'=>$msg->getImage(),
+                        'voiceRecord'=>$msg->getAudio(),
+                    ];
+               }
+
+            $tableData[] = [
+                'conversation_id' => $conversation->getId(),
+                'user_id' => $theuser->getId(),
+                'user_name'=>$theuser->getName(),
+                'user_image'=>$theuser->getImage(),
+                'online_status'=>$theuser->isOnline(),
+                'chat'=>$org_chat,
+            ];
+        }
+        return $this->json(['Success' => $tableData], Response::HTTP_ACCEPTED);
+
+        
+
+        return $this->json(['Success' => "Friend Request Canceled Successfuly"], Response::HTTP_ACCEPTED);
+
+    }
+
+
+
+
+
+
+
+
+    #[Route('/SendMsg', name: 'app_SendMsg')]
+    public function SendMsg(MessageRepository $rp7,ConversationRepository $rp6,CommentRepository $rp5,LikeRepository $rp4,UserRepository $rp ,FriendRequestRepository $rp2,PostRepository $rp3,Request $request,ManagerRegistry $mr): JsonResponse
+    {
+        $jsonContent = $request->getContent();
+        
+        // Debugging: Log the raw JSON content
+        file_put_contents('php://stderr', "Request Content: $jsonContent\n");
+        $data = json_decode($jsonContent, true);
+
+
+        if ($data === null) {
+            return $this->json(['error' => 'Invalid JSON'], Response::HTTP_BAD_REQUEST);
+        }
+        $CurrentUserToken = $data['Token'] ?? null;     
+        $msg = $data['msg'] ?? null;  
+        $recv_id = $data['recv_id'] ?? null;     
+   
+
+
+        if($CurrentUserToken == null || $recv_id == null || $msg == null ){
+            return $this->json(['error' => 'Something Went Wrong'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $Currentuser = $rp->findBy(['token'=>$CurrentUserToken]);
+
+        if($Currentuser == []){
+            return $this->json(['error' => 'Something Went Wrong'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $Currentuser = $Currentuser[0];
+    // look for the recv user
+        $recv_user = $rp->find($recv_id);
+        if($recv_user == null){
+            return $this->json(['error' => 'Something Went Wrong'], Response::HTTP_BAD_REQUEST);
+        }
+    //look for conversation where ids myid and the recv_id        
+       $conversation = $rp6->LookforConversationbettweentwousers($Currentuser->getId(),$recv_user->getId());
+        
+       if($conversation == []){
+            return $this->json(['error' => 'Something Went Wrong'], Response::HTTP_BAD_REQUEST);
+        }
+        $new_msg = new Message();
+        $new_msg->setContent($msg);
+        $new_msg->setSenderId($Currentuser);
+        $new_msg->setTime(new DateTime());
+        $new_msg->setConversationId($conversation[0]);
+
+
+        try{
+            $em = $mr->getManager();
+            $em->persist($new_msg);
+            $em->flush();
+            // notify recv with a real time notif
+            try{
+                $this->expoNotificationService->sendNotification($recv_user->getDeviceToken(), "New Message",$Currentuser->getName() . " : ". $new_msg->getContent(),["APPEND_NEW_MESSAGE"=>["conversation_id"=>$conversation[0]->getId(),"New_msg"=>["msg_id"=>$new_msg->getId(),"am_i_sender"=>false,"content"=>$new_msg->getContent(),"time"=>$new_msg->getTime()->format(DATE_ATOM)]]]);
+            }catch(Exception $e){
+
+            }
+
+            return $this->json(['Success' => "Message Sent Successfuly"], Response::HTTP_ACCEPTED);
+            }catch(Exception $e){
+                return $this->json(['error' => 'ERROR Whilte inserting Into DataBase : '.$e], Response::HTTP_SERVICE_UNAVAILABLE);
+            }
+
+
+    }
+
+
+
+    #[Route('/SendMsgImage', name: 'app_SendMsgImage')]
+    public function SendMsgImage(ConversationRepository $rp6,UserRepository $rp ,FriendRequestRepository $rp2,PostRepository $rp3,Request $request,ManagerRegistry $mr): JsonResponse
+    {
+
+        $image = $request->files->get('image');
+        $Token = $request->request->get('Token');
+        $recv_id = $request->request->get('recv_id');
+
+        if($Token==null || ($image == null) || $recv_id == null){
+            return $this->json(['error' => 'Something Went Wrong1'], Response::HTTP_BAD_REQUEST);
+        }
+        $user = $rp->findBy(['token'=>$Token]);
+
+        if($user == null){
+            return $this->json(['error' => 'Something Went Wrong2'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $user = $user[0];
+
+        $recv_user = $rp->find($recv_id);
+        if($recv_user == null){
+            return $this->json(['error' => 'Something Went Wrong3'], Response::HTTP_BAD_REQUEST);
+        }
+        if($recv_user == null){
+            return $this->json(['error' => 'Something Went Wrong4'], Response::HTTP_BAD_REQUEST);
+        }
+
+
+        $conversation = $rp6->LookforConversationbettweentwousers($user->getId(),$recv_user->getId());
+        
+        if($conversation == []){
+             return $this->json(['error' => 'Something Went Wrong5'], Response::HTTP_BAD_REQUEST);
+         }
+         //upload image to cloudinary
+         $result = null;
+
+         try{
+            if($image != null){
+                $result = $this->uploadImageCloudinary($image);
+            }
+         }catch(Exception $e){
+            $result = null;
+         }
+        
+         
+
+         $new_msg = new Message();
+         $new_msg->setContent(null);
+         $new_msg->setSenderId($user);
+         $new_msg->setTime(new DateTime());
+         $new_msg->setConversationId($conversation[0]);
+         if($result != null)
+         $new_msg->setImage($result);
+         
+ 
+ 
+         try{
+             $em = $mr->getManager();
+             $em->persist($new_msg);
+             $em->flush();
+             // notify recv with a real time notif
+             try{
+                 $this->expoNotificationService->sendNotification($recv_user->getDeviceToken(), "New Message",$user->getName() . " : ". " Sent You An Image",["APPEND_NEW_MESSAGE"=>["conversation_id"=>$conversation[0]->getId(),"New_msg"=>["msg_id"=>$new_msg->getId(),"am_i_sender"=>false,"content"=>null,'image'=>$result,"time"=>$new_msg->getTime()->format(DATE_ATOM)]]]);
+             }catch(Exception $e){
+ 
+             }
+ 
+             return $this->json(['Success' => "Message Sent Successfuly"], Response::HTTP_ACCEPTED);
+             }catch(Exception $e){
+                 return $this->json(['error' => 'ERROR Whilte inserting Into DataBase : '.$e], Response::HTTP_SERVICE_UNAVAILABLE);
+             }
+            }
+
+
+
+
+
+
+
+
+
+
+            #[Route('/SendVoice', name: 'app_SendVoice')]
+    public function SendVoice(ConversationRepository $rp6,UserRepository $rp ,FriendRequestRepository $rp2,PostRepository $rp3,Request $request,ManagerRegistry $mr): JsonResponse
+    {
+
+        $audio = $request->files->get('audio');
+        $Token = $request->request->get('Token');
+        $recv_id = $request->request->get('recv_id');
+
+        if($Token==null || ($audio == null) || $recv_id == null){
+            return $this->json(['error' => 'Something Went Wrong1'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $user = $rp->findBy(['token'=>$Token]);
+
+        if($user == null){
+            return $this->json(['error' => 'Something Went Wrong2'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $user = $user[0];
+
+        $recv_user = $rp->find($recv_id);
+        if($recv_user == null){
+            return $this->json(['error' => 'Something Went Wrong3'], Response::HTTP_BAD_REQUEST);
+        }
+        if($recv_user == null){
+            return $this->json(['error' => 'Something Went Wrong4'], Response::HTTP_BAD_REQUEST);
+        }
+
+
+        $conversation = $rp6->LookforConversationbettweentwousers($user->getId(),$recv_user->getId());
+        
+        if($conversation == []){
+             return $this->json(['error' => 'Something Went Wrong5'], Response::HTTP_BAD_REQUEST);
+         }
+         //upload image to cloudinary
+         $result = null;
+
+         try{
+            if($audio != null){
+                $result = $this->uploadAudioCloudinary($audio);
+            }
+         }catch(Exception $e){
+            $result = null;
+
+         }
+        
+         
+
+         $new_msg = new Message();
+         $new_msg->setContent(null);
+         $new_msg->setSenderId($user);
+         $new_msg->setTime(new DateTime());
+         $new_msg->setConversationId($conversation[0]);
+         $new_msg->setImage(null);
+         if($result != null)
+         $new_msg->setAudio($result);
+         try{
+             $em = $mr->getManager();
+             $em->persist($new_msg);
+             $em->flush();
+             // notify recv with a real time notif
+             try{
+                 $this->expoNotificationService->sendNotification($recv_user->getDeviceToken(), "New Message",$user->getName() . " : ". " Sent You An Audio Message",["APPEND_NEW_MESSAGE"=>["conversation_id"=>$conversation[0]->getId(),"New_msg"=>["msg_id"=>$new_msg->getId(),"am_i_sender"=>false,"content"=>null,'voiceRecord'=>$result,"time"=>$new_msg->getTime()->format(DATE_ATOM)]]]);
+             }catch(Exception $e){
+ 
+             }
+ 
+             return $this->json(['Success' => "Message Sent Successfuly"], Response::HTTP_ACCEPTED);
+             }catch(Exception $e){
+                 return $this->json(['error' => 'ERROR Whilte inserting Into DataBase : '.$e], Response::HTTP_SERVICE_UNAVAILABLE);
+             }
+            }
 
 
 }

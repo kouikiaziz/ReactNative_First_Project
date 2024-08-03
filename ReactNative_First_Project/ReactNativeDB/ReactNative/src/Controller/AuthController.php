@@ -3,6 +3,7 @@
 namespace App\Controller;
 
 use App\Entity\User;
+use App\Repository\ConversationRepository;
 use App\Repository\UserRepository;
 use App\Service\ExpoNotificationService;
 use DateTime;
@@ -45,8 +46,6 @@ class AuthController extends AbstractController
         }
 
 
-
-
         if (!$username || !$email || !$phone || !$password || !$cpassword ) {
             return $this->json(['error' => 'Missing required fields username : '.$username.' email : '.$email .' phone : '. $phone . ' password : '.$password.' cpassword : '.$cpassword .'\nRecived Request : '.$request], Response::HTTP_BAD_REQUEST);
         }
@@ -60,6 +59,7 @@ class AuthController extends AbstractController
         $user->setPhone($phone);
          $user->setPassword($password);
         $user->setPassword($hasher->hashPassword($user,$user->getPassword()));
+        $user->setOnline(true);
          // to change into userDeviceToken for notifications
         $user->setAccountCreationDate(new DateTime());
         $user->setLastLogin(new DateTime());
@@ -70,8 +70,14 @@ class AuthController extends AbstractController
         }
         $result=null;
         if($uploadedFile){
-        $result = $this->uploadImageCloudinary($uploadedFile);
-        $user->setImage($result);
+            try{
+                $result = $this->uploadImageCloudinary($uploadedFile);
+                $user->setImage($result);
+            }catch(Exception $e){
+                $user->setImage("https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_960_720.png");
+
+            }
+        
         }else{
         $user->setImage("https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_960_720.png");
         }
@@ -361,6 +367,7 @@ class AuthController extends AbstractController
 
         $user->setToken(null);
         $user->setDeviceToken(null);
+        $user->setOnline(0);
 
         try{
             $em = $mr->getManager();
@@ -618,6 +625,79 @@ class AuthController extends AbstractController
             return $this->json(['error' => 'ERROR Whilte inserting Into DataBase : '.$e], Response::HTTP_SERVICE_UNAVAILABLE);
         }
         return $this->json(['Token' => $user->getToken(),'username'=>$user->getName(),'email' => $user->getEmail(),'DeviceToken'=>$user->getDeviceToken(),'image'=>$user->getImage(),'phone'=>$user->getPhone()], Response::HTTP_ACCEPTED);
+        
+    }
+
+
+
+    #[Route('/UpdateStatus', name: 'app_UpdateStatus')]
+    public function UpdateStatus(ConversationRepository $rp6,UserRepository $rp,ManagerRegistry $mr,Request $request,UserPasswordHasherInterface $hasher): JsonResponse
+    {      
+        $jsonContent = $request->getContent();
+        
+        // Debugging: Log the raw JSON content
+        file_put_contents('php://stderr', "Request Content: $jsonContent\n");
+        $data = json_decode($jsonContent, true);
+
+
+        if ($data === null) {
+            return $this->json(['error' => 'Invalid JSON'], Response::HTTP_BAD_REQUEST);
+        }
+        
+        $token = $data['Token'] ?? null;
+        $setStatus = $data['setStatus'] ?? null;
+
+        if($token == null || $setStatus == null){
+            return $this->json(['error' => 'Something Went Wrong'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $user = $rp->findBy(['token' => $token]);
+    
+        if($user == [] ){
+            return $this->json(['error' => 'Something Went Wrong'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $user = $user[0];
+            if($setStatus == 1){
+                $user->setOnline(true);
+            }else{
+                $user->setOnline(false);
+            }
+
+
+        try{
+            $em = $mr->getManager();
+            $em->persist($user);
+            $em->flush();
+            }catch(Exception $e){
+                return $this->json(['error' => 'ERROR Whilte inserting Into DataBase : '.$e], Response::HTTP_SERVICE_UNAVAILABLE);
+            }
+            //get all the current user friends and send them a notification so they can update his statue in their UI 
+            $conversations = $rp6->GetAllConversationsWhereUserIdExists($user->getId());
+
+
+           $to_send_to = null;
+        foreach ($conversations as $converation) {
+            // $tableData[] = [
+            //     'conversation_id' => $converation->getId(),
+            //     'online_status'=>$user->isOnline(),
+            // ];
+            if($converation->getUser1()->getId()== $user->getId()){
+                $to_send_to = $converation->getUser2();
+            }else{
+                $to_send_to = $converation->getUser1();
+            }
+            try{
+                $this->expoNotificationService->sendNotification($to_send_to->getDeviceToken(),"N/A",'EMPTY',['user_came_online'=>['conversation_id'=>$converation->getId(),'online_status'=>$user->isOnline()]]);
+                
+            }catch(Exception $e){
+
+            }
+        }
+
+
+            return $this->json(['Success' => 'User Status Updated'], Response::HTTP_ACCEPTED);
+
         
     }
     

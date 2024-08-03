@@ -1,5 +1,5 @@
-import { StyleSheet, Text, View } from 'react-native'
-import React, { useRef } from 'react'
+import { AppState, StyleSheet, Text, View } from 'react-native'
+import React, { useContext, useEffect, useRef, useState } from 'react'
 
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import Loginscreen from '../Loginscreen';
@@ -16,7 +16,60 @@ const Tabs = createBottomTabNavigator();
 import * as Notifications from 'expo-notifications';
 import  Posts from '../Posts'
 import HomeNavigator from './HomeNavigator'
+import AuthContext from '@/app/Auth/Context';
+import HomeApi from '@/app/api/HomeApi';
 const InAppNavigator = () => {
+
+  let session = useContext(AuthContext);
+
+
+
+
+
+
+async function updateStatus(data,bool){
+  if(bool == true){
+    data.setStatus=1;
+  }else{
+    data.setStatus=2;
+  }
+  let res = await HomeApi.UpdateStatus(data);
+  if(res.ok){
+    console.log(res.data);
+  }else{
+    console.log('not ok');
+  }
+}
+
+
+
+   //detect if app is closed or opened
+   const appState = useRef(AppState.currentState);
+   const [appStateVisible, setAppStateVisible] = useState(appState.current);
+   let data = {Token : session.user.Token};
+   useEffect(() => {
+     const subscription = AppState.addEventListener("change", nextAppState => {
+       if (appState.current.match(/inactive|background/) && nextAppState === "active") {
+         console.log("App has come to the foreground!");
+         // update user status to online
+         updateStatus(data,true)
+
+       } else if (nextAppState.match(/inactive|background/)) {
+         console.log("App has gone to the background or closed!");
+         // update user status to offline
+         updateStatus(data,false)
+
+       }
+ 
+       appState.current = nextAppState;
+       setAppStateVisible(appState.current);
+       console.log("OYOYOYO : AppState", appState.current);
+     });
+ 
+     return () => {
+       subscription.remove();
+     };
+   }, []);
 
   // const responseListener = useRef();
   // const notificationListener = useRef();

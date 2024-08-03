@@ -1,12 +1,24 @@
 import { StyleSheet, Text, View, TouchableOpacity, Image } from 'react-native'
 import React from 'react'
 import colors from '../config/colors'
+import { FontAwesome } from '@expo/vector-icons'; // Make sure to install @expo/vector-icons
 
-const SettingsCard = ({ Title,  Subtitle,uri_u=null ,onP,...otherprops}) => {
+
+const SettingsCard = ({ Title,  Subtitle,uri_u=null,Online ,onP,...otherprops}) => {
   return (
     <View style={styles.container}>
       <TouchableOpacity style={styles.touchable} onPress={onP} {...otherprops} >
+      
+      <View style={styles.imageContainer}>
+
       <Image style={styles.image} source={{ uri: uri_u != null ? uri_u : 'https://via.placeholder.com/100' }} />       
+      {Online==true && (
+            <View style={styles.onlineIndicator}>
+              <FontAwesome name="circle" size={14} color="green" />
+            </View>
+          )}
+        </View>
+       
        <View style={styles.textContainer}>
           <Text style={styles.text1}>{Title}</Text>
           {Subtitle && <Text style={styles.text2}>{Subtitle}</Text>}
@@ -48,5 +60,19 @@ const styles = StyleSheet.create({
   },
   text2: {
     color: '#007bb5',
+  },
+  imageContainer: {
+    position: 'relative',
+  },
+  onlineIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    height: 18,
+    width: 18,
+    borderRadius: 9,
+    backgroundColor: 'white',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 })

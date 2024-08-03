@@ -48,6 +48,9 @@ class User implements PasswordAuthenticatedUserInterface
     #[ORM\Column(length: 255,nullable: true)]
     private ?string $image = null;
 
+    #[ORM\Column]
+    private ?bool $online = null;
+
    
 
     public function __construct()
@@ -181,6 +184,18 @@ class User implements PasswordAuthenticatedUserInterface
     public function setImage(?string $image): static
     {
         $this->image = $image;
+
+        return $this;
+    }
+
+    public function isOnline(): ?bool
+    {
+        return $this->online;
+    }
+
+    public function setOnline(bool $online): static
+    {
+        $this->online = $online;
 
         return $this;
     }

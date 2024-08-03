@@ -35,10 +35,10 @@ let x = 0;
        { iconname && <MaterialCommunityIcons name={'chevron-down'} color={Iconcolor} size={IconSize}/>}
     </View>
     <FlatList
-    keyExtractor={(item) => item.id.toString()}
+    keyExtractor={(item) => item.conversation_id.toString()}
     data={items}
     renderItem={({item}) => 
-        <SettingsCard onP={()=>{navigateto(item.id)}} Title={item.name}></SettingsCard>
+        <SettingsCard onP={()=>{disableM();navigateto(item);}} uri_u={item.user_image} Title={item.user_name}></SettingsCard>
     }
     ></FlatList>
 
